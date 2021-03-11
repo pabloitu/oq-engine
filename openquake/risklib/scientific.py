@@ -23,6 +23,7 @@ import copy
 import bisect
 import itertools
 import collections
+import warnings
 from functools import lru_cache
 
 import numpy
@@ -37,6 +38,8 @@ F32 = numpy.float32
 U32 = numpy.uint32
 U16 = numpy.uint16
 U8 = numpy.uint8
+
+warnings.simplefilter("error", category=sparse.base.SparseEfficiencyWarning)
 
 
 def pairwise(iterable):
@@ -209,7 +212,7 @@ class VulnerabilityFunction(object):
         :param cutoff: a function setting to zero losses below a threshold
         :returns: a matrix of loss ratios of shape (A, E)
         """
-        losses = sparse.dok_matrix(AE)
+        losses = sparse.lil_matrix(AE)
         if self.distribution_name == 'LN':
             for eid, df in ratio_df.groupby('eid'):
                 means = df['mean'].to_numpy()
@@ -1311,7 +1314,8 @@ class AggLossTable(AccumDict):
         # aggregation
         K = len(self.aggkey) - 1
         for lni, ln in enumerate(self.loss_names):
-            for (aid, eid), loss in out[ln].items():
+            coo = out[ln]
+            for aid, eid, loss in zip(coo.row, coo.col, coo.data):
                 self[eid, K, lni] += loss
                 # this is the slow part, if aggregate_by is given
                 if kid:
