@@ -100,7 +100,8 @@ class MultiFaultSource(BaseSeismicSource):
         assert sections
         self.sections = sections
         section_idxs = [s.sec_id for s in sections]
-        msg = 'Rupture #{:d}: section "{:s}" does not exists'
+        msg = 'Rupture #{:d} uses section {:s}. I cannot find this index in'
+        msg += ' the list of sections'
         for i in range(len(self.mags)):
             for idx in self.rupture_idxs[i]:
                 if idx not in section_idxs:
