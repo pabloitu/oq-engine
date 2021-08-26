@@ -70,13 +70,11 @@ def getdefault(dic_with_default, key):
 
 def unique_sorted(items):
     """
-    Check that the items are unique and sorted
+    Check that the items are unique and sort them by magnitude
     """
     if len(set(items)) < len(items):
         raise ValueError('Found duplicates in %s' % items)
-    elif items != sorted(items):
-        raise ValueError('%s is not ordered' % items)
-    return items
+    return sorted(items)
 
 
 # used for the maximum distance parameter in the job.ini file
