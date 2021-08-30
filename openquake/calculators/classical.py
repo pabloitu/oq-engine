@@ -243,9 +243,10 @@ def classical_tile(srcs, cmaker, monitor):
     """
     cmaker.init_monitoring(monitor)
     sitecol = monitor.read('sitecol')
-    for tile in sitecol.split_in_tiles(cmaker.ntiles):
+    for tile_id, tile in enumerate(sitecol.split_in_tiles(cmaker.ntiles)):
         res = hazclassical(srcs, tile, cmaker)
         if res['pmap']:
+            res['tile_id'] = tile_id
             yield res
 
 
@@ -269,12 +270,12 @@ class Hazard:
             extreme.append((grp_id, trt, 0, smrs))
         self.extreme = numpy.array(extreme, grp_extreme_dt)
 
-    def init(self, pmaps, grp_id):
+    def init(self, pmaps, grp_id, tile_id):
         """
         Initialize the pmaps dictionary with zeros, if needed
         """
         L, G = self.imtls.size, len(self.cmakers[grp_id].gsims)
-        pmaps[grp_id] = ProbabilityMap.build(L, G, self.sids)
+        pmaps[grp_id, tile_id] = ProbabilityMap.build(L, G, self.sids)
 
     def store_poes(self, grp_id, pmap):
         """
@@ -283,9 +284,12 @@ class Hazard:
         cmaker = self.cmakers[grp_id]
         dset = self.datastore['_poes']
         base.fix_ones(pmap)  # avoid saving PoEs == 1, fast
-        arr = numpy.array([pmap[sid].array for sid in pmap]).transpose(2, 0, 1)
+        start = min(pmap)
+        stop = max(pmap) + 1
+        sids = range(start, stop)
+        arr = numpy.array([pmap[sid].array for sid in sids]).transpose(2, 0, 1)
         for g, mat in enumerate(arr):
-            dset[cmaker.start + g] = mat  # shape NL
+            dset[cmaker.start + g, slice(start, stop)] = mat  # shape NL
         extreme = max(
             get_extreme_poe(pmap[sid].array, self.imtls)
             for sid in pmap)
@@ -344,6 +348,7 @@ class ClassicalCalculator(base.HazardCalculator):
         if self.few_sites and len(dic['rup_data']['src_id']):
             with self.monitor('saving rup_data'):
                 store_ctxs(self.datastore, dic['rup_data'], grp_id)
+        tile_id = dic.get('tile_id', 0)
         with self.monitor('aggregate curves'):
             pmap = dic['pmap']
             pmap.grp_id = grp_id
@@ -353,14 +358,14 @@ class ClassicalCalculator(base.HazardCalculator):
                 acc[source_id.split(':')[0]] = pmap
             if pmap:
                 if grp_id not in acc:
-                    self.haz.init(acc, grp_id)
-                acc[grp_id] |= pmap
+                    self.haz.init(acc, grp_id, tile_id)
+                acc[grp_id, tile_id] |= pmap
 
-        self.counts[grp_id] -= 1
-        if self.counts[grp_id] == 0:
+        self.counts[grp_id, tile_id] -= 1
+        if self.counts[grp_id, tile_id] == 0:
             with self.monitor('saving probability maps'):
                 if grp_id in acc:
-                    self.haz.store_poes(grp_id, acc.pop(grp_id))
+                    self.haz.store_poes(grp_id, acc.pop(grp_id, tile_id))
         return acc
 
     def create_dsets(self):
@@ -599,7 +604,7 @@ class ClassicalCalculator(base.HazardCalculator):
         """
         oq = self.oqparam
         if self.N > oq.max_sites_per_tile:
-            ntiles = numpy.ceil(self.N / oq.max_sites_per_tile)
+            ntiles = int(numpy.ceil(self.N / oq.max_sites_per_tile))
         else:
             ntiles = 1
         allargs = []
@@ -628,14 +633,16 @@ class ClassicalCalculator(base.HazardCalculator):
             sg = src_groups[grp_id]
             if sg.atomic:
                 # do not split atomic groups
-                self.counts[grp_id] += ntiles
+                for tile_id in range(ntiles):
+                    self.counts[grp_id, tile_id] += 1
                 allargs.append((sg, cmakers[grp_id]))
             else:  # regroup the sources in blocks
                 blks = (groupby(sg, get_source_id).values()
                         if oq.disagg_by_src else
                         block_splitter(sg, max_weight, get_weight, sort=True))
                 blocks = list(blks)
-                self.counts[grp_id] += len(blocks) * ntiles
+                for tile_id in range(ntiles):
+                    self.counts[grp_id, tile_id] += len(blocks)
                 for block in blocks:
                     logging.debug('Sending %d source(s) with weight %d',
                                   len(block), sum(src.weight for src in block))
