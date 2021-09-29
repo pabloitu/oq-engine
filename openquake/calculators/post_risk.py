@@ -31,6 +31,27 @@ U16 = numpy.uint16
 U32 = numpy.uint32
 
 
+def post_risk(items, builder, dstore):
+    dic = general.AccumDict(accum=[])
+    with dstore.open('r'):
+        for k, indices in items:
+            for start, stop in indices:
+                rbe = dstore.read_df('risk_by_event', slc=slice(start, stop))
+                for (r, l), df in rbe.groupby(['rlz_id', 'loss_id']):
+                    curve = {}
+                    for kind in builder.loss_kinds:
+                        arr = df[kind].to_numpy()
+                        curve[kind] = builder.build_curve(arr, r)
+                    for p, period in enumerate(builder.periods):
+                        dic['agg_id'].append(k)
+                        dic['rlz_id'].append(r)
+                        dic['loss_id'].append(l)
+                        dic['period'].append(period)
+                        for kind in builder.loss_kinds:
+                            dic[kind].append(curve[kind][p])
+    return pandas.DataFrame(dic)
+
+
 def reagg_idxs(num_tags, tagnames):
     """
     :param num_tags: dictionary tagname -> number of tags with that tagname
