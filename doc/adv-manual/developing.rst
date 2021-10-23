@@ -347,16 +347,14 @@ from engine version 3.13):
 >>> from openquake.hazardlib import valid
 >>> from openquake.hazardlib.tests.gsim.utils import read_cmaker_df, gen_ctxs
 >>> gsim = valid.gsim("Atkinson2015")
-
->> cmaker, df = read_cmaker_df(gsim, ["verification_table.csv"])
+>>> #cmaker, df = read_cmaker_df(gsim, ["verification_table.csv"])
 
 Then you can immediately compute mean and standard deviations and
 compare with the values in the verification table:
 
->> mean, sig, tau, phi = cmaker.get_mean_stds(gen_ctxs(df))
+>>> # mean, sig, tau, phi = cmaker.get_mean_stds(gen_ctxs(df))
 
 *sig* refers to the "TOTAL_STDDEV", *tau* to the "INTER_EVENT_STDDEV"
 and *phi* to the "INTRA_EVENT_STDDEV". This is how the tests
 in hazardlib are implemented. Interested users should look at the
-code in
-*https://github.com/gem/oq-engine/blob/master/openquake/hazardlib/tests/gsim/utils.py.
+code in https://github.com/gem/oq-engine/blob/master/openquake/hazardlib/tests/gsim/utils.py.
