@@ -667,10 +667,6 @@ class ClassicalCalculator(base.HazardCalculator):
         nslices = sum(len(slices) for slices in slicedic.values())
         logging.info('There are %d slices of poes [%.1f per task]',
                      nslices, nslices / len(slicedic))
-        allargs = [
-            (getters.PmapGetter(dstore, ws, slices, oq.imtls, oq.poes),
-             N, hstats, individual, oq.max_sites_disagg, self.amplifier)
-            for slices in slicedic.values()]
         self.hazard = {}  # kind -> array
         hcbytes = 8 * N * S * M * L1
         hmbytes = 8 * N * S * M * P if oq.poes else 0
