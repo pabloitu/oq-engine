@@ -153,6 +153,11 @@ class PmapGetter(object):
         self.rlzs_by_g = dstore['rlzs_by_g'][()]
         self.slices = slices
         self._pmap = {}
+        self.df = {}
+        with hdf5.File(self.filename) as dstore:
+            for start, stop in self.slices:
+                self.df[start, stop] = dstore.read_df(
+                    '_poes', slc=slice(start, stop))
 
     @property
     def sids(self):
@@ -189,7 +194,7 @@ class PmapGetter(object):
         G = len(self.rlzs_by_g)
         with hdf5.File(self.filename) as dstore:
             for start, stop in self.slices:
-                poes_df = dstore.read_df('_poes', slc=slice(start, stop))
+                poes_df = self.df[start, stop]
                 for sid, df in poes_df.groupby('sid'):
                     try:
                         array = self._pmap[sid].array

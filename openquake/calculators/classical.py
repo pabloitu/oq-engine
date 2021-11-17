@@ -678,13 +678,14 @@ class ClassicalCalculator(base.HazardCalculator):
                      humansize(hcbytes), humansize(hmbytes))
         if not performance.numba:
             logging.info('numba is not installed: using the slow algorithm')
-        self.datastore.swmr_on()  # essential before Starmap
-        parallel.Starmap(
-            postclassical, allargs,
-            distribute='no' if self.few_sites else None,
-            h5=self.datastore.hdf5,
-            slowdown=.5 if N > 20_000 and ct > 256 else 0
-        ).reduce(self.collect_hazard)
+        smap = parallel.Starmap(
+            postclassical, distribute='no' if self.few_sites else None,
+            h5=self.datastore.hdf5)
+        for slices in slicedic.values():
+            getter = getters.PmapGetter(dstore, ws, slices, oq.imtls, oq.poes)
+            smap.submit((getter, N, hstats, individual, oq.max_sites_disagg,
+                         self.amplifier))
+        smap.reduce(self.collect_hazard)
         for kind in sorted(self.hazard):
             logging.info('Saving %s', kind)  # very fast
             self.datastore[kind][:] = self.hazard.pop(kind)
