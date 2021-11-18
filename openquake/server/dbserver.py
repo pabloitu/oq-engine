@@ -19,6 +19,7 @@
 import os
 import sys
 import time
+import socket
 import sqlite3
 import logging
 import getpass
@@ -83,8 +84,23 @@ class DbServer(object):
 
     def start(self):
         """
-        Start database worker threads
+        Start database worker threads and the task streamer if OQ_DISTRIBUTE=zmq
         """
+        if p.OQDIST == 'zmq':
+            # start task_in->task_server streamer thread
+            threading.Thread(target=w._streamer, daemon=True).start()
+            logging.warning('Task streamer started on port %d',
+                            int(config.zworkers.ctrl_port) + 1)
+            if 'git' not in __version__:
+                # in production installations start the zworkers too
+                self.zmaster.start()
+        hostIP = socket.gethostbyname(config.dbserver.host)
+        listenIP = socket.gethostbyname(config.dbserver.listen)
+        if listenIP != hostIP:
+            print('Cannot start a DbServer on a different machine, %s!=%s' %
+                  (config.dbserver.host, config.dbserver.listen))
+            return
+
         # give a nice name to the process
         w.setproctitle('oq-dbserver')
 
@@ -95,14 +111,6 @@ class DbServer(object):
             dworkers.append(sock)
         logging.warning('DB server started with %s on %s, pid %d',
                         sys.executable, self.frontend, self.pid)
-        if p.OQDIST == 'zmq':
-            # start task_in->task_server streamer thread
-            threading.Thread(target=w._streamer, daemon=True).start()
-            logging.warning('Task streamer started on port %d',
-                            int(config.zworkers.ctrl_port) + 1)
-            if 'git' not in __version__:
-                # in production installations start the zworkers
-                self.zmaster.start()
         # start frontend->backend proxy for the database workers
         try:
             z.zmq.proxy(z.bind(self.frontend, z.zmq.ROUTER),
