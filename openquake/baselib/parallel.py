@@ -789,7 +789,7 @@ class Starmap(object):
             self.__class__.running_tasks = self.tasks
             self.socket = Socket(self.receiver, zmq.PULL, 'bind').__enter__()
             monitor.backurl = 'tcp://%s:%s' % (
-                config.dbserver.host, self.socket.port)
+                config.dbserver.listen, self.socket.port)
             monitor.version = version
             monitor.config = config
         OQ_TASK_NO = os.environ.get('OQ_TASK_NO')
