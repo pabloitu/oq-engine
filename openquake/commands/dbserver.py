@@ -48,10 +48,7 @@ def main(cmd,
         else:
             print('dbserver already stopped')
     elif cmd == 'start':
-        if status == 'not-running':
-            dbs.run_server(dbhostport, loglevel, foreground)
-        else:
-            print('dbserver already running')
+        dbs.run_server(dbhostport, loglevel, foreground)
 
 
 main.cmd = dict(help='dbserver command', choices='start stop status'.split())
