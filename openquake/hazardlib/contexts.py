@@ -472,12 +472,15 @@ class ContextMaker(object):
             fat RuptureContexts sorted by mag
         """
         if hasattr(src_or_ruptures, 'source_id'):
+            rup_offset = src_or_ruptures.rup_offset
             irups = self._gen_rups(src_or_ruptures, sitecol)
         else:
+            rup_offset = 0
             irups = src_or_ruptures
         ctxs = []
         fewsites = len(sitecol.complete) <= self.max_sites_disagg
-        for rup in irups:
+        for r, rup in enumerate(irups):
+            rup_offset += r
             sites = getattr(rup, 'sites', sitecol)
             try:
                 r_sites, dctx = self.filter(sites, rup)
@@ -499,6 +502,7 @@ class ContextMaker(object):
             for name in r_sites.array.dtype.names:
                 setattr(ctx, name, r_sites[name])
             ctx.src_id = src_id
+            ctx.id = rup_offset
             for par in self.REQUIRES_DISTANCES | {'rrup'}:
                 setattr(ctx, par, getattr(dctx, par))
             if fewsites:
@@ -937,7 +941,8 @@ class PmapMaker(object):
         return pmap
 
     def dictarray(self, ctxs):
-        dic = {'src_id': []}  # par -> array
+        # dictionary par -> array
+        dic = {'src_id': [], 'id': U32([ctx.id for ctx in ctxs])}
         if not ctxs:
             return dic
         ctx = ctxs[0]

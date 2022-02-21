@@ -319,7 +319,7 @@ class ClassicalCalculator(base.HazardCalculator):
             for dparam in cm.REQUIRES_DISTANCES:
                 params.add(dparam + '_')
         if self.few_sites:
-            descr = []  # (param, dt)
+            descr = [('id', U32)]  # (param, dt)
             for param in params:
                 if param == 'sids_':
                     dt = hdf5.vuint16

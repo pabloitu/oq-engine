@@ -269,8 +269,12 @@ def split_source(src):
             s.samples = src.samples
         if has_scaling_rate:
             s.scaling_rate = src.scaling_rate
+    rup_offset = src.rup_offset
     for split in splits:
         split.nsites = src.nsites
+        split.rup_offset = rup_offset
+        rup_offset += split.num_ruptures
+        assert split.num_ruptures
     return splits
 
 

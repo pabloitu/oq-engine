@@ -736,7 +736,12 @@ def _check_csm(csm, oqparam, h5):
     logging.info('Checking the sources bounding box')
     lons = []
     lats = []
+    rup_offset = 0
     for src in srcs:
+        if not src.num_ruptures:
+            src.num_ruptures = src.count_ruptures()
+        src.rup_offset = rup_offset
+        rup_offset += src.num_ruptures
         try:
             box = srcfilter.get_enlarged_box(src)
         except BBoxError as exc:
