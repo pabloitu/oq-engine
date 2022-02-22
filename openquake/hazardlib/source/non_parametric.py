@@ -71,11 +71,16 @@ class NonParametricSeismicSource(BaseSeismicSource):
             Generator of instances of :class:`openquake.hazardlib.source.
             rupture.NonParametricProbabilisticRupture`.
         """
+        incr = -1
         for rup, pmf in self.data:
+            incr += 1
             if rup.mag >= self.min_mag:
-                yield NonParametricProbabilisticRupture(
+                rup = NonParametricProbabilisticRupture(
                     rup.mag, rup.rake, self.tectonic_region_type,
                     rup.hypocenter, rup.surface, pmf, weight=rup.weight)
+                rup.id = self.rup_offset + incr
+                incr += 1
+                yield rup
 
     def few_ruptures(self):
         """
@@ -91,12 +96,15 @@ class NonParametricSeismicSource(BaseSeismicSource):
         if len(self.data) == 1:  # there is nothing to split
             yield self
             return
+        rup_offset = self.rup_offset
         for i, block in enumerate(block_splitter(self.data, 100)):
             source_id = '%s:%d' % (self.source_id, i)
             src = self.__class__(source_id, self.name,
                                  self.tectonic_region_type, block)
             src.num_ruptures = len(block)
             src.trt_smr = self.trt_smr
+            src.rup_offset = rup_offset
+            rup_offset += src.num_ruptures
             yield src
 
     def count_ruptures(self):

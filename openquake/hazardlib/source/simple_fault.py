@@ -146,6 +146,7 @@ class SimpleFaultSource(ParametricSeismicSource):
         fault_length = float((mesh_cols - 1) * self.rupture_mesh_spacing)
         fault_width = float((mesh_rows - 1) * self.rupture_mesh_spacing)
 
+        incr = 0
         for mag, mag_occ_rate in self.get_annual_occurrence_rates():
             rup_cols, rup_rows = self._get_rupture_dimensions(
                 fault_length, fault_width, mag)
@@ -164,10 +165,13 @@ class SimpleFaultSource(ParametricSeismicSource):
                         occurrence_rate_hypo = occurrence_rate
                         surface = SimpleFaultSurface(mesh)
 
-                        yield ParametricProbabilisticRupture(
+                        rup = ParametricProbabilisticRupture(
                             mag, self.rake, self.tectonic_region_type,
                             hypocenter, surface, occurrence_rate_hypo,
                             self.temporal_occurrence_model)
+                        rup.id = self.rup_offset + incr
+                        incr += 1
+                        yield rup
                     else:
                         for hypo in self.hypo_list:
                             for slip in self.slip_list:
@@ -178,11 +182,14 @@ class SimpleFaultSource(ParametricSeismicSource):
                                     hypo[2] * slip[1]
                                 rupture_slip_direction = slip[0]
 
-                                yield ParametricProbabilisticRupture(
+                                rup = ParametricProbabilisticRupture(
                                     mag, self.rake, self.tectonic_region_type,
                                     hypocenter, surface, occurrence_rate_hypo,
                                     self.temporal_occurrence_model,
                                     rupture_slip_direction)
+                                rup.id = self.rup_offset + incr
+                                incr += 1
+                                yield rup
 
     def few_ruptures(self):
         """
@@ -336,6 +343,7 @@ class SimpleFaultSource(ParametricSeismicSource):
             return
         if not hasattr(self, '_nr'):
             self.count_ruptures()
+        rup_offset = self.rup_offset
         for i, (mag, rate) in enumerate(mag_rates):
             # This is needed in order to reproduce the logic in the
             # `rupture_count` method
@@ -344,6 +352,8 @@ class SimpleFaultSource(ParametricSeismicSource):
             src = copy.copy(self)
             src.mfd = mfd.ArbitraryMFD([mag], [rate])
             src.num_ruptures = self._nr[i]
+            src.rup_offset = rup_offset
+            rup_offset += src.num_ruptures
             yield src
 
     @property

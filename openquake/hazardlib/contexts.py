@@ -472,15 +472,12 @@ class ContextMaker(object):
             fat RuptureContexts sorted by mag
         """
         if hasattr(src_or_ruptures, 'source_id'):
-            rup_offset = src_or_ruptures.rup_offset
             irups = self._gen_rups(src_or_ruptures, sitecol)
         else:
-            rup_offset = 0
             irups = src_or_ruptures
         ctxs = []
         fewsites = len(sitecol.complete) <= self.max_sites_disagg
-        for r, rup in enumerate(irups):
-            rup_offset += r
+        for rup in irups:
             sites = getattr(rup, 'sites', sitecol)
             try:
                 r_sites, dctx = self.filter(sites, rup)
@@ -502,7 +499,6 @@ class ContextMaker(object):
             for name in r_sites.array.dtype.names:
                 setattr(ctx, name, r_sites[name])
             ctx.src_id = src_id
-            ctx.id = rup_offset
             for par in self.REQUIRES_DISTANCES | {'rrup'}:
                 setattr(ctx, par, getattr(dctx, par))
             if fewsites:
@@ -564,13 +560,17 @@ class ContextMaker(object):
             yield from rups(self._ruptures(src), sites)
 
     def _cps_rups(self, src, sites, point_rup=False):
-        if src.count_nphc() == 1:  # nothing to collapse
+        nphc = src.count_nphc()
+        if nphc == 1:  # nothing to collapse
             for rup in src.iruptures(point_rup):
                 yield self._ruptures(src, rup.mag, point_rup), sites
             return
         fewsites = len(sites) <= self.max_sites_disagg
         cdist = sites.get_cdist(src.location)
+        incr = 0
         for rup in src.iruptures(point_rup):
+            rup.id = src.rup_offset + incr
+            incr += nphc
             psdist = self.pointsource_distance + src.get_radius(rup)
             close = sites.filter(cdist <= psdist)
             far = sites.filter(cdist > psdist)
@@ -774,7 +774,7 @@ class ContextMaker(object):
             # may happen for CollapsedPointSources
             return 0
         src.nsites = len(sites)
-        if src.code in b'pP':
+        if src.code == b'p':
             allrups = []
             for irups, r_sites in self._cps_rups(src, sites, point_rup=True):
                 for rup in irups:

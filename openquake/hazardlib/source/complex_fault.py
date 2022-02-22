@@ -188,7 +188,9 @@ class ComplexFaultSource(ParametricSeismicSource):
         whole_fault_mesh = whole_fault_surface.mesh
         cell_center, cell_length, cell_width, cell_area = (
             whole_fault_mesh.get_cell_dimensions())
+        incr = -1
         for mag, mag_occ_rate in self.get_annual_occurrence_rates():
+            incr += 1
             # min_mag is inside get_annual_occurrence_rates
             if mag_occ_rate == 0:
                 continue
@@ -213,6 +215,8 @@ class ComplexFaultSource(ParametricSeismicSource):
                     mag, self.rake, self.tectonic_region_type, hypocenter,
                     surface, occurrence_rate, self.temporal_occurrence_model)
                 rup.mag_occ_rate = mag_occ_rate
+                rup.id = self.rup_offset + incr
+                incr += 1
                 yield rup
 
     def few_ruptures(self):
@@ -259,11 +263,14 @@ class ComplexFaultSource(ParametricSeismicSource):
             return
         if not hasattr(self, '_nr'):
             self.count_ruptures()
+        rup_offset = self.rup_offset
         for i, (mag, rate) in enumerate(mag_rates):
             src = copy.copy(self)
             src.mfd = mfd.ArbitraryMFD([mag], [rate])
             src.num_ruptures = self._nr[i]
             src.source_id = '%s:%d' % (self.source_id, i)
+            src.rup_offset = rup_offset
+            rup_offset += src.num_ruptures
             yield src
 
     @property

@@ -238,6 +238,7 @@ class PointSource(ParametricSeismicSource):
         """
         filtermag = kwargs.get('mag')
         point_rup = kwargs.get('point_rup')
+        incr = 0
         for mag, mag_occ_rate in self.get_annual_occurrence_rates():
             if filtermag and mag != filtermag:
                 continue  # yield only ruptures of magnitude filtermag
@@ -248,17 +249,20 @@ class PointSource(ParametricSeismicSource):
                                depth=hc_depth)
                     occurrence_rate = mag_occ_rate * np_prob * hc_prob
                     if point_rup:
-                        yield PointRupture(
+                        rup = PointRupture(
                             mag, self.tectonic_region_type, hc,
                             0, np.rake, occurrence_rate,
                             self.temporal_occurrence_model)
                     else:
                         surface, nhc = self._get_rupture_surface(mag, np, hc)
-                        yield ParametricProbabilisticRupture(
+                        rup = ParametricProbabilisticRupture(
                             mag, np.rake, self.tectonic_region_type,
                             nhc if kwargs.get('shift_hypo') else hc,
                             surface, occurrence_rate,
                             self.temporal_occurrence_model)
+                    rup.id = self.rup_offset + incr
+                    incr += 1
+                    yield rup
 
     # PointSource
     def iruptures(self, point_rup=False):
@@ -271,7 +275,19 @@ class PointSource(ParametricSeismicSource):
         yield from _rupture_by_mag(self, np, hc, point_rup)
 
     def few_ruptures(self):
-        yield from self.iruptures(point_rup=True)
+        """
+        :yields: PointRuptures
+        """
+        for mag, mag_occ_rate in self.get_annual_occurrence_rates():
+            np_prob, np = self.nodal_plane_distribution.data[0]
+            hc_prob, hc_depth = self.hypocenter_distribution.data[0]
+            hc = Point(latitude=self.location.latitude,
+                       longitude=self.location.longitude,
+                       depth=hc_depth)
+            yield PointRupture(
+                mag, self.tectonic_region_type, hc,
+                0, np.rake, mag_occ_rate * np_prob * hc_prob,
+                self.temporal_occurrence_model)
 
     def count_nphc(self):
         """
@@ -455,7 +471,10 @@ class CollapsedPointSource(PointSource):
         """
         :returns: an iterator over the underlying ruptures
         """
+        rup_offset = 0
         for src in self.pointsources:
+            self.rup_offset = rup_offset
+            rup_offset += src.num_ruptures
             yield from src.iter_ruptures(**kwargs)
 
     # CollapsedPointSource

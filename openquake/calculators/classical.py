@@ -542,8 +542,11 @@ class ClassicalCalculator(base.HazardCalculator):
         Compute the statistical hazard curves
         """
         # first of all, a sanity check on the rupture IDs
-        rup_id = self.datastore['rup/id'][:]
-        assert len(rup_id) == len(numpy.unique(rup_id))
+        rup_id = self.datastore['rup/id']
+        tot = len(rup_id)
+        if 0 < tot < 1_000_000:
+            uniq = len(numpy.unique(rup_id[:]))
+            assert tot == uniq, (tot, uniq)
         task_info = self.datastore.read_df('task_info', 'taskname')
         try:
             dur = task_info.loc[b'classical'].duration

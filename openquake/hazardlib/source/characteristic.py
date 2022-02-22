@@ -91,10 +91,13 @@ class CharacteristicFaultSource(ParametricSeismicSource):
         rupture with a surface always equal to the given surface.
         """
         hypocenter = self.surface.get_middle_point()
+        incr = 0
         for mag, occurrence_rate in self.get_annual_occurrence_rates():
-            yield ParametricProbabilisticRupture(
+            rup = ParametricProbabilisticRupture(
                 mag, self.rake, self.tectonic_region_type, hypocenter,
                 self.surface, occurrence_rate, self.temporal_occurrence_model)
+            rup.id = self.rup_offset + incr
+            incr += 1
 
     def few_ruptures(self):
         """

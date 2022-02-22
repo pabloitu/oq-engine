@@ -114,6 +114,7 @@ class AreaSource(ParametricSeismicSource):
         # for each of the epicenter positions generate as many ruptures
         # as we generated "reference" ones: new ruptures differ only
         # in hypocenter and surface location
+        incr = 0
         for epicenter in polygon_mesh:
             for mag, rake, hc_depth, surface, occ_rate in ref_ruptures:
                 # translate the surface from first epicenter position
@@ -124,6 +125,8 @@ class AreaSource(ParametricSeismicSource):
                 rupture = ParametricProbabilisticRupture(
                     mag, rake, self.tectonic_region_type, hypocenter,
                     surface, occ_rate, self.temporal_occurrence_model)
+                rupture.rup_offset = self.rup_offset + incr
+                incr += 1
                 yield rupture
 
     def few_ruptures(self):
@@ -182,6 +185,7 @@ class AreaSource(ParametricSeismicSource):
         else:
             raise TypeError('Unknown MFD: %s' % area_mfd)
 
+        rup_offset = self.rup_offset
         for i, (lon, lat) in enumerate(zip(mesh.lons, mesh.lats)):
             pt = PointSource(
                 # Generate a new ID and name
@@ -200,6 +204,8 @@ class AreaSource(ParametricSeismicSource):
                 hypocenter_distribution=self.hypocenter_distribution,
                 temporal_occurrence_model=self.temporal_occurrence_model)
             pt.num_ruptures = pt.count_ruptures()
+            pt.rup_offset = rup_offset
+            rup_offset += pt.num_ruptures
             yield pt
 
     def wkt(self):

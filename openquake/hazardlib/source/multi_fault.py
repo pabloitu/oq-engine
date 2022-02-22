@@ -132,9 +132,11 @@ class MultiFaultSource(BaseSeismicSource):
                 sfc = MultiSurface([s[idx].surface for idx in idxs])
             rake = self.rakes[i]
             hypo = self.sections[idxs[0]].surface.get_middle_point()
-            yield NonParametricProbabilisticRupture(
+            rup = NonParametricProbabilisticRupture(
                 self.mags[i], rake, self.tectonic_region_type, hypo, sfc,
                 self.pmfs[i])
+            rup.id = self.rup_offset + i
+            yield rup
 
     def few_ruptures(self):
         """
@@ -158,6 +160,7 @@ class MultiFaultSource(BaseSeismicSource):
             yield self
             return
         # split in blocks of BLOCKSIZE ruptures each
+        rup_offset = self.rup_offset
         for i, slc in enumerate(gen_slices(0, len(self.mags), BLOCKSIZE)):
             src = self.__class__(
                 '%s:%d' % (self.source_id, i),
@@ -169,6 +172,8 @@ class MultiFaultSource(BaseSeismicSource):
                 self.rakes[slc])
             src.set_sections(self.sections)
             src.num_ruptures = src.count_ruptures()
+            src.rup_offset = rup_offset
+            rup_offset += src.num_ruptures
             yield src
 
     def count_ruptures(self):

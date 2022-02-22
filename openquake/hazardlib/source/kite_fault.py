@@ -134,6 +134,7 @@ class KiteFaultSource(ParametricSeismicSource):
         tom = self.temporal_occurrence_model
         surface = self.surface
         slc = kwargs.get('slc', slice(None))
+        incr = 0
         for mag, mag_occ_rate in self.get_annual_occurrence_rates():
 
             # Compute the area, length and width of the ruptures
@@ -179,8 +180,11 @@ class KiteFaultSource(ParametricSeismicSource):
             for rup in ruptures[slc]:
                 hypocenter = rup[0].get_center()
                 # Yield an instance of a ParametricProbabilisticRupture
-                yield ppr(mag, self.rake, self.tectonic_region_type,
-                          hypocenter, rup[0], occurrence_rate, tom)
+                inst = ppr(mag, self.rake, self.tectonic_region_type,
+                           hypocenter, rup[0], occurrence_rate, tom)
+                inst.id = self.rup_offset + incr
+                incr += 1
+                yield inst
 
     def few_ruptures(self):
         """
@@ -269,6 +273,7 @@ class KiteFaultSource(ParametricSeismicSource):
         if len(self._rupture_rates) == 1:  # not splittable
             yield self
             return
+        rup_offset = self.rup_offset
         for mag_lab in self._rupture_count:
             if self._rupture_rates[mag_lab] == 0:
                 continue
@@ -276,6 +281,7 @@ class KiteFaultSource(ParametricSeismicSource):
             mag = float(mag_lab)
             src.mfd = mfd.ArbitraryMFD([mag], [self._rupture_rates[mag_lab]])
             src.num_ruptures = self._rupture_count[mag_lab]
+            rup_offset += src.num_ruptures
             yield src
 
     @property

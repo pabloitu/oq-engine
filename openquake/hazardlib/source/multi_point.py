@@ -68,6 +68,7 @@ class MultiPointSource(ParametricSeismicSource):
         self.mesh = mesh
 
     def __iter__(self):
+        rup_offset = self.rup_offset
         for i, (mfd, point) in enumerate(zip(self.mfd, self.mesh)):
             name = '%s:%s' % (self.source_id, i)
             ps = PointSource(
@@ -83,6 +84,8 @@ class MultiPointSource(ParametricSeismicSource):
                 self.hypocenter_distribution)
             ps.num_ruptures = ps.count_ruptures()
             ps.scaling_rate = getattr(self, 'scaling_rate', 1)
+            ps.rup_offset = rup_offset
+            rup_offset += ps.num_ruptures
             yield ps
 
     def __len__(self):
