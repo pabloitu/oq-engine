@@ -123,7 +123,7 @@ def single_valued(array):
     return len(numpy.unique(array)) == 1
 
 
-def collapse_array(array, cfactor):
+def collapse_array(array, cfactor, monitor):
     """
     Collapse a structured array with uniform magnitude
     """
@@ -153,17 +153,18 @@ def collapse_array(array, cfactor):
     out = numpy.zeros(len(close) + len(arrays), array.dtype)
     out[:C] = close
     allsids = [U32([sid]) for sid in close['sids']]
-    for a, arr in enumerate(arrays, C):
-        n = len(arr)
-        cfactor[0] += 1
-        cfactor[1] += n
-        if n == 1:
-            out[a] = arr
-        else:
-            o = out[a]
-            for name in names:
-                o[name] = arr[name].mean()
-        allsids.append(arr['sids'])
+    with monitor:
+        for a, arr in enumerate(arrays, C):
+            n = len(arr)
+            cfactor[0] += 1
+            cfactor[1] += n
+            if n == 1:
+                out[a] = arr
+            else:
+                o = out[a]
+                for name in names:
+                    o[name] = arr[name].mean()
+            allsids.append(arr['sids'])
     return out.view(numpy.recarray), allsids
 
 
@@ -693,13 +694,12 @@ class ContextMaker(object):
 
         # collapse if possible
         if isarray and self.collapse_level:
-            with self.col_mon:
-                arrays, allsids = [], []
-                for a in split_array(ctx, U32(ctx.mag*100)):
-                    array, sids_ = collapse_array(a, self.cfactor)
-                    arrays.append(array)
-                    allsids.extend(sids_)
-                ctx = numpy.concatenate(arrays).view(numpy.recarray)
+            arrays, allsids = [], []
+            for a in split_array(ctx, U32(ctx.mag*100)):
+                array, sids_ = collapse_array(a, self.cfactor, self.col_mon)
+                arrays.append(array)
+                allsids.extend(sids_)
+            ctx = numpy.concatenate(arrays).view(numpy.recarray)
         else:  # no collapse
             self.cfactor[0] += len(ctx)
             self.cfactor[1] += len(ctx)
