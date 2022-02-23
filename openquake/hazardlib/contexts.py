@@ -119,13 +119,17 @@ def get_num_distances(gsims):
     return len(dists)
 
 
+def single_valued(array):
+    return len(numpy.unique(array)) == 1
+
+
 def collapse_array(array, cfactor):
     """
     Collapse a structured array with uniform magnitude
     """
     # i.e. mag, rake, vs30, rjb, dbi, sids, occurrence_rate
     names = array.dtype.names
-    if 'rake' not in names or len(numpy.unique(array['rake'])) == 1:
+    if 'rake' not in names or single_valued(array['rake']):
         # collapse all
         far = array
         close = numpy.zeros(0, array.dtype)
@@ -136,7 +140,7 @@ def collapse_array(array, cfactor):
         close = array[~tocollapse]
     C = len(close)
     if len(far):
-        if 'vs30' in names:
+        if 'vs30' in names and not single_valued(far['vs30']):
             far.sort(order=['vs30', 'dbi'])
             arrays = split_array(far, U32(U32(far['vs30']) * 256 + far['dbi']))
         else:  # for ToroEtAl2002
