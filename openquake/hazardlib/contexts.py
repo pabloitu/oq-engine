@@ -736,18 +736,8 @@ class ContextMaker(object):
             # may happen for CollapsedPointSources
             return 0
         src.nsites = len(sites)
-        if src.code in b'pP':
-            allrups = []
-            for irups, r_sites in self._cps_rups(src, sites, point_rup=True):
-                for rup in irups:
-                    rup.sites = r_sites
-                    allrups.append(rup)
-            rups = allrups[::25]
-            nrups = len(allrups)
-            # print(nrups, len(rups))
-        else:
-            rups = list(src.few_ruptures())
-            nrups = src.num_ruptures
+        rups = list(src.few_ruptures())
+        nrups = src.num_ruptures
         try:
             ctxs = self.get_ctxs(rups, sites)
         except ValueError:
