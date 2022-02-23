@@ -549,42 +549,9 @@ class ContextMaker(object):
 
     def _gen_rups(self, src, sites):
         # yield ruptures, each one with a .sites attribute
-        def rups(rupiter, sites):
-            for rup in rupiter:
-                rup.sites = sites
-                yield rup
-        if getattr(src, 'location', None):
-            # finite site effects are averaged for sites over the
-            # pointsource_distance from the rupture (if any)
-            for r, s in self._cps_rups(src, sites):
-                yield from rups(r, s)
-        else:  # just add the ruptures
-            yield from rups(self._ruptures(src), sites)
-
-    def _cps_rups(self, src, sites, point_rup=False):
-        if src.count_nphc() == 1:  # nothing to collapse
-            for rup in src.iruptures(point_rup):
-                yield self._ruptures(src, rup.mag, point_rup), sites
-            return
-        fewsites = len(sites) <= self.max_sites_disagg
-        cdist = sites.get_cdist(src.location)
-        for rup in src.iruptures(point_rup):
-            psdist = self.pointsource_distance + src.get_radius(rup)
-            close = sites.filter(cdist <= psdist)
-            far = sites.filter(cdist > psdist)
-            if fewsites:
-                if close is None:  # all is far, common for small mag
-                    yield [rup], sites
-                else:  # something is close
-                    yield self._ruptures(src, rup.mag, point_rup), sites
-            else:  # many sites
-                if close is None:  # all is far
-                    yield [rup], far
-                elif far is None:  # all is close
-                    yield self._ruptures(src, rup.mag, point_rup), close
-                else:  # some sites are far, some are close
-                    yield [rup], far
-                    yield self._ruptures(src, rup.mag, point_rup), close
+        for rup in self._ruptures(src):
+            rup.sites = sites
+            yield rup
 
     def get_pmap(self, ctxs, probmap=None):
         """

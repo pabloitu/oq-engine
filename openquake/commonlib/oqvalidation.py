@@ -1046,6 +1046,8 @@ class OqParam(valid.ParamSet):
             self.hazard_imtls = dict.fromkeys(
                 self.intensity_measure_types, [0])
             delattr(self, 'intensity_measure_types')
+        if 'ps_grid_spacing' in names_vals:
+            self.collapse_level = 1
         if ('ps_grid_spacing' in names_vals and
                 'pointsource_distance' not in names_vals):
             raise InvalidFile('%s: ps_grid_spacing requires setting a '
