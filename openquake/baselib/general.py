@@ -971,7 +971,8 @@ def fast_agg(indices, values=None, axis=0, factor=None, M=None):
     if M is None:
         M = max(indices) + 1
     if not shp:
-        return numpy.bincount(indices, values, M)
+        return numpy.bincount(
+            indices, values if factor is None else values * factor, M)
     lst = list(shp)
     lst.insert(axis, M)
     res = numpy.zeros(lst, values.dtype)
@@ -1001,17 +1002,20 @@ def fast_agg2(tags, values=None, axis=0):
     return uniq, fast_agg(indices, values, axis)
 
 
-def fast_agg3(structured_array, kfield, vfields, factor=None):
+def fast_agg3(structured_array, kfield, vfields=None, factor=None):
     """
     Aggregate a structured array with a key field (the kfield)
-    and some value fields (the vfields).
+    and some value fields (the vfields). If vfields is not passed,
+    use all fields except the kfield.
 
     >>> data = numpy.array([(1, 2.4), (1, 1.6), (2, 2.5)],
     ...                    [('aid', U16), ('val', F32)])
-    >>> fast_agg3(data, 'aid', ['val'])
+    >>> fast_agg3(data, 'aid')
     array([(1, 4. ), (2, 2.5)], dtype=[('aid', '<u2'), ('val', '<f4')])
     """
     allnames = structured_array.dtype.names
+    if vfields is None:
+        vfields = [name for name in allnames if name != kfield]
     assert kfield in allnames, kfield
     for vfield in vfields:
         assert vfield in allnames, vfield
@@ -1024,6 +1028,34 @@ def fast_agg3(structured_array, kfield, vfields, factor=None):
         dtlist.append((name, structured_array.dtype[name]))
     res = numpy.zeros(len(uniq), dtlist)
     res[kfield] = uniq
+    for name in dic:
+        res[name] = dic[name]
+    return res
+
+
+# this is fast
+def kmean(structured_array, kfield, uniq_indices_counts=()):
+    """
+    Given a structured array of N elements with a discrete kfield with
+    K <= N unique values, returns a structured array of K elements
+    obtained by averaging the values associated to the kfield.
+    """
+    allnames = structured_array.dtype.names
+    assert kfield in allnames, kfield
+    if uniq_indices_counts:
+        uniq, indices, counts = uniq_indices_counts
+    else:
+        uniq, indices, counts = numpy.unique(
+            structured_array[kfield], return_inverse=True, return_counts=True)
+    dic = {}
+    dtlist = []
+    for name in allnames:
+        if name == kfield:
+            dic[kfield] = uniq
+        else:
+            dic[name] = fast_agg(indices, structured_array[name]) / counts
+        dtlist.append((name, structured_array.dtype[name]))
+    res = numpy.zeros(len(uniq), dtlist)
     for name in dic:
         res[name] = dic[name]
     return res

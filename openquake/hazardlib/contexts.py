@@ -34,7 +34,7 @@ try:
 except ImportError:
     numba = None
 from openquake.baselib.general import (
-    AccumDict, DictArray, RecordBuilder, gen_slices)
+    AccumDict, DictArray, RecordBuilder, gen_slices, kmean)
 from openquake.baselib.performance import Monitor, split_array
 from openquake.baselib.python3compat import decode
 from openquake.hazardlib import valid, imt as imt_module
@@ -47,6 +47,7 @@ from openquake.hazardlib.calc.filters import (
     MINMAG, MAXMAG)
 from openquake.hazardlib.probability_map import ProbabilityMap
 from openquake.hazardlib.geo.surface import PlanarSurface
+from openquake.hazardlib.geo.surface.multi import get_distdic, MultiSurface
 
 U32 = numpy.uint32
 F64 = numpy.float64
@@ -127,44 +128,33 @@ def collapse_array(array, cfactor, monitor):
     """
     Collapse a structured array with uniform magnitude
     """
-    # i.e. mag, rake, vs30, rjb, dbi, sids, occurrence_rate
-    names = array.dtype.names
-    if 'rake' not in names or single_valued(array['rake']):
-        # collapse all
-        far = array
-        close = numpy.zeros(0, array.dtype)
-    else:
-        # collapse far away ruptures
-        tocollapse = array['rrup'] >= array['mag'] * 10
-        far = array[tocollapse]
-        close = array[~tocollapse]
-    C = len(close)
-    if len(far):
-        if 'vs30' in names and not single_valued(far['vs30']):
-            far.sort(order=['vs30', 'dbi'])
-            arrays = split_array(far, U32(U32(far['vs30']) * 256 + far['dbi']))
-        else:  # for ToroEtAl2002
-            far.sort(order='dbi')
-            arrays = split_array(far, far['dbi'])
-    else:
-        arrays = []
-    cfactor[0] += len(close)
-    cfactor[1] += len(close)
-    out = numpy.zeros(len(close) + len(arrays), array.dtype)
-    out[:C] = close
-    allsids = [U32([sid]) for sid in close['sids']]
     with monitor:
-        for a, arr in enumerate(arrays, C):
-            n = len(arr)
-            cfactor[0] += 1
-            cfactor[1] += n
-            if n == 1:
-                out[a] = arr
-            else:
-                o = out[a]
-                for name in names:
-                    o[name] = arr[name].mean()
-            allsids.append(arr['sids'])
+        # i.e. mag, rake, vs30, rjb, mdvbin, sids, occurrence_rate
+        names = array.dtype.names
+        if 'rake' not in names or single_valued(array['rake']):
+            # collapse all
+            far = array
+            close = numpy.zeros(0, array.dtype)
+        else:
+            # collapse far away ruptures
+            tocollapse = array['rrup'] >= array['mag'] * 10
+            far = array[tocollapse]
+            close = array[~tocollapse]
+        C = len(close)
+        if len(far):
+            uic = numpy.unique(  # this is fast
+                far['mdvbin'], return_inverse=True, return_counts=True)
+            mean = kmean(far, 'mdvbin', uic)
+        else:
+            mean = numpy.zeros(0, array.dtype)
+        cfactor[0] += len(close) + len(mean)
+        cfactor[1] += len(array)
+        out = numpy.zeros(len(close) + len(mean), array.dtype)
+        out[:C] = close
+        out[C:] = mean
+        allsids = [[sid] for sid in close['sids']]
+        if len(far):  # this is slow
+            allsids.extend(split_array(far['sids'], uic[1], uic[2]))
     return out.view(numpy.recarray), allsids
 
 
@@ -248,6 +238,8 @@ class ContextMaker(object):
             self.imtls = DictArray(param['hazard_imtls'])
         elif not hasattr(self, 'imtls'):
             raise KeyError('Missing imtls in ContextMaker!')
+
+        self.dcache = {}
         self.af = param.get('af', None)
         self.max_sites_disagg = param.get('max_sites_disagg', 10)
         self.max_sites_per_tile = param.get('max_sites_per_tile', 50_000)
@@ -261,7 +253,9 @@ class ContextMaker(object):
             if hasattr(gsim, 'set_tables'):
                 gsim.set_tables(self.mags, self.imtls)
         self.maximum_distance = _interp(param, 'maximum_distance', trt)
-        self.dist_bins = valid.sqrscale(0, self.maximum_distance(10), 100)
+        # TODO: try to raise the 100 below to 255
+        self.dst_bins = valid.sqrscale(0, self.maximum_distance(MAXMAG), 100)
+        self.mag_bins = numpy.linspace(MINMAG, MAXMAG, 255)
         self.cfactor = numpy.zeros(2)  # used to compute the collapse factor
         if 'pointsource_distance' not in param:
             self.pointsource_distance = 1000.
@@ -310,7 +304,7 @@ class ContextMaker(object):
                     dic[req] = dt(0)
             else:
                 dic[req] = 0.
-        dic['dbi'] = numpy.uint8(0)  # distance bin index
+        dic['mdvbin'] = U32(0)  # velocity-magnitude-distance bin
         dic['sids'] = U32(0)
         dic['rrup'] = numpy.float64(0)
         dic['occurrence_rate'] = numpy.float64(0)
@@ -366,6 +360,7 @@ class ContextMaker(object):
         """
         C = sum(len(ctx) for ctx in ctxs)
         ra = self.ctx_builder.zeros(C).view(numpy.recarray)
+        vs30 = "vs30" in ra.dtype.names
         start = 0
         for ctx in ctxs:
             ctx = ctx.roundup(self.minimum_distance)
@@ -373,8 +368,13 @@ class ContextMaker(object):
                 gsim.set_parameters(ctx)
             slc = slice(start, start + len(ctx))
             for par in self.ctx_builder.names:
-                if par == 'dbi':  # set a few lines below
-                    val = numpy.searchsorted(self.dist_bins, ctx.rrup)
+                if par == 'mdvbin':  # set a few lines below
+                    magbin = numpy.searchsorted(self.mag_bins, ctx.mag)
+                    dstbin = numpy.searchsorted(self.dst_bins, ctx.rrup)
+                    if vs30:
+                        val = (magbin * 256 + dstbin) * 65536 + U32(ctx.vs30)
+                    else:
+                        val = (magbin * 256 + dstbin) * 65536
                 elif par == 'occurrence_rate':  # missing in scenario
                     val = getattr(ctx, par, 0.)
                 else:  # never missing
@@ -427,7 +427,12 @@ class ContextMaker(object):
         :returns:
             (filtered sites, distance context)
         """
-        distances = get_distances(rup, sites, 'rrup')
+        if (isinstance(rup.surface, MultiSurface) and
+                hasattr(rup.surface.surfaces[0], 'suid')):
+            distdic = get_distdic(rup, sites.complete, ['rrup'], self.dcache)
+            distances = distdic['rrup'][sites.sids]
+        else:
+            distances = get_distances(rup, sites, 'rrup')
         mdist = self.maximum_distance(rup.mag)
         mask = distances <= mdist
         if mask.any():
@@ -484,7 +489,12 @@ class ContextMaker(object):
             irups = src_or_ruptures
         ctxs = []
         fewsites = len(sitecol.complete) <= self.max_sites_disagg
+
+        # Create the distance cache. A dictionary of dictionaries
+        dcache = {}
         for rup in irups:
+            caching = (isinstance(rup.surface, MultiSurface) and
+                       hasattr(rup.surface.surfaces[0], 'suid'))
             sites = getattr(rup, 'sites', sitecol)
             try:
                 r_sites, dctx = self.filter(sites, rup)
@@ -492,9 +502,19 @@ class ContextMaker(object):
                 continue
             ctx = self.make_rctx(rup)
             ctx.sites = r_sites
-            for param in self.REQUIRES_DISTANCES - {'rrup'}:
-                distances = get_distances(rup, r_sites, param)
-                setattr(dctx, param, distances)
+
+            # In case of a multifault source we use a cache with distances
+            if caching:
+                params = self.REQUIRES_DISTANCES - {'rrup'}
+                distdic = get_distdic(rup, r_sites.complete, params, dcache)
+                for key, val in distdic.items():
+                    setattr(dctx, key, val[r_sites.sids])
+            else:
+                for param in self.REQUIRES_DISTANCES - {'rrup'}:
+                    distances = get_distances(rup, r_sites, param)
+                    setattr(dctx, param, distances)
+
+            # Equivalent distances
             reqv_obj = (self.reqv.get(self.trt) if self.reqv else None)
             if reqv_obj and isinstance(rup.surface, PlanarSurface):
                 reqv = reqv_obj.get(dctx.repi, rup.mag)
@@ -694,12 +714,7 @@ class ContextMaker(object):
 
         # collapse if possible
         if isarray and self.collapse_level:
-            arrays, allsids = [], []
-            for a in split_array(ctx, U32(ctx.mag*100)):
-                array, sids_ = collapse_array(a, self.cfactor, self.col_mon)
-                arrays.append(array)
-                allsids.extend(sids_)
-            ctx = numpy.concatenate(arrays).view(numpy.recarray)
+            ctx, allsids = collapse_array(ctx, self.cfactor, self.col_mon)
         else:  # no collapse
             self.cfactor[0] += len(ctx)
             self.cfactor[1] += len(ctx)
