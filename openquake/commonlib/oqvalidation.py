@@ -514,8 +514,7 @@ pointsource_distance:
   Default: {'default': 1000}
 
 ps_grid_spacing:
-  Used in classical calculations to grid the point sources. Requires the
-  *pointsource_distance* to be set too.
+  Used in classical calculations to grid the point sources.
   Example: *ps_grid_spacing = 50*.
   Default: no default
 
@@ -1048,11 +1047,6 @@ class OqParam(valid.ParamSet):
             delattr(self, 'intensity_measure_types')
         if 'ps_grid_spacing' in names_vals:
             self.collapse_level = 1
-        if ('ps_grid_spacing' in names_vals and
-                'pointsource_distance' not in names_vals):
-            raise InvalidFile('%s: ps_grid_spacing requires setting a '
-                              'pointsource_distance!' % self.inputs['job_ini'])
-
         self._risk_files = get_risk_files(self.inputs)
         if self.risk_files:
             # checks for risk_files
@@ -1732,15 +1726,6 @@ class OqParam(valid.ParamSet):
             self.hazard_curves_from_gmfs or self.calculation_mode in
             ('classical', 'disaggregation'))
         return not invalid
-
-    def is_valid_ps_grid_spacing(self):
-        """
-        `ps_grid_spacing` must be smaller than the `pointsource_distance`
-        """
-        if self.ps_grid_spacing is None:
-            return True
-        return self.ps_grid_spacing <= calc.filters.getdefault(
-            self.pointsource_distance, 'default')
 
     def is_valid_soil_intensities(self):
         """

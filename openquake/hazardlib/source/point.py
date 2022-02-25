@@ -529,6 +529,12 @@ def grid_point_sources(sources, ps_grid_spacing, monitor=Monitor()):
             out.append(cps)
         else:  # there is a single source
             out.append(ps[idxs[0]])
+
+    # sanity check on the number of sources
+    expected = len(sources)
+    got = sum(len(o.pointsources) if hasattr(o, 'pointsources') else 1
+              for o in out)
+    assert got == expected, (got, expected)
     return {grp_id: out}
 
 
