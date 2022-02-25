@@ -920,7 +920,7 @@ class PmapMaker(object):
         filt = (self.srcfilter.filter if not self.split_sources or self.N == 1
                 else self.srcfilter.split)
         cm = self.cmaker
-        maxsize = 50000
+        maxsize = 250_000
         allctxs = []
         for src, sites in filt(self.group):
             t0 = time.time()
