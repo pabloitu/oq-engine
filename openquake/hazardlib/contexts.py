@@ -633,7 +633,13 @@ class ContextMaker(object):
             pmap = ProbabilityMap(size(self.imtls), len(self.gsims))
         else:  # update passed probmap
             pmap = probmap
+        poissonian, other = [], []
         for ctx in ctxs:
+            if not hasattr(ctx, 'probs_occur') and not self.af:
+                poissonian.append(ctx)
+            else:
+                other.append(ctx)
+        for ctx in [self.recarray(poissonian)] + other:
             for poes, pnes, allsids, ctx in self.gen_poes(ctx):
                 for poe, pne, sids in zip(poes, pnes, allsids):
                     for sid in sids:
@@ -753,9 +759,7 @@ class ContextMaker(object):
         """
         from openquake.hazardlib.site_amplification import get_poes_site
         L, G = self.loglevels.size, len(self.gsims)
-        maxsize = 50_000  # heuristic
         isarray = isinstance(ctx, numpy.ndarray)
-
         # collapse if possible
         if isarray and self.collapse_level:
             ctx, allsids = collapse_array(ctx, self.cfactor, self.col_mon)
@@ -765,6 +769,7 @@ class ContextMaker(object):
             allsids = ctx.sids.reshape(-1, 1)
 
         # split large context arrays to avoid filling the CPU cache
+        maxsize = 50_000  # heuristic
         if isarray and ctx.nbytes > maxsize:
             slices = gen_slices(0, len(ctx), maxsize)
         else:
@@ -906,11 +911,6 @@ class PmapMaker(object):
             if self.fewsites:  # keep rupdata in memory
                 for ctx in ctxs:
                     self.rupdata.append(ctx)
-            if not self.af and not numpy.isnan(
-                    [ctx.occurrence_rate for ctx in ctxs]).any():
-                # vectorize poissonian contexts
-                ctxs = [self.cmaker.recarray(ctxs)]
-
         return ctxs
 
     def _make_src_indep(self):
