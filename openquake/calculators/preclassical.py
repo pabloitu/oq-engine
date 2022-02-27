@@ -46,6 +46,10 @@ class MagBinMFD(object):
         self.magbin = magbin
         self.mfd = mfd
 
+    def __iter__(self):  # MultiMFD
+        for mfd in self.mfd:
+            yield MagBinMFD(self.magbin, mfd)
+
     def get_annual_occurrence_rates(self):
         items = self.mfd.get_annual_occurrence_rates()
         out = [(mag, rate) for mag, rate in items
