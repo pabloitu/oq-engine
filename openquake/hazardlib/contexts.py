@@ -34,7 +34,7 @@ try:
 except ImportError:
     numba = None
 from openquake.baselib.general import (
-    AccumDict, DictArray, RecordBuilder, gen_slices, kmean)
+    AccumDict, DictArray, RecordBuilder, gen_slices, kmean, groupby)
 from openquake.baselib.performance import Monitor, split_array
 from openquake.baselib.python3compat import decode
 from openquake.hazardlib import valid, imt as imt_module
@@ -56,6 +56,11 @@ STD_TYPES = (StdDev.TOTAL, StdDev.INTER_EVENT, StdDev.INTRA_EVENT)
 KNOWN_DISTANCES = frozenset(
     'rrup rx ry0 rjb rhypo repi rcdpp azimuth azimuth_cp rvolc closest_point'
     .split())
+
+
+def split_by_mag(ctxs, key=lambda ctx: numpy.round(ctx.mag * 100)):
+    for mag, rows in itertools.groupby(sorted(ctxs, key=key), key):
+        yield rows
 
 
 def size(imtls):
@@ -633,7 +638,13 @@ class ContextMaker(object):
             pmap = ProbabilityMap(size(self.imtls), len(self.gsims))
         else:  # update passed probmap
             pmap = probmap
+        poissonian, other = [], []
         for ctx in ctxs:
+            if not hasattr(ctx, 'probs_occur') and not self.af:
+                poissonian.append(ctx)
+            else:
+                other.append(ctx)
+        for ctx in [self.recarray(poissonian)] + other:
             for poes, pnes, allsids, ctx in self.gen_poes(ctx):
                 for poe, pne, sids in zip(poes, pnes, allsids):
                     for sid in sids:
@@ -906,11 +917,6 @@ class PmapMaker(object):
             if self.fewsites:  # keep rupdata in memory
                 for ctx in ctxs:
                     self.rupdata.append(ctx)
-            if not self.af and not numpy.isnan(
-                    [ctx.occurrence_rate for ctx in ctxs]).any():
-                # vectorize poissonian contexts
-                ctxs = [self.cmaker.recarray(ctxs)]
-
         return ctxs
 
     def _make_src_indep(self):
@@ -928,7 +934,11 @@ class PmapMaker(object):
             nctxs = len(ctxs)
             nsites = sum(len(ctx) for ctx in ctxs)
             if nsites:
-                cm.get_pmap(ctxs, pmap)
+                if self.split_sources:
+                    cm.get_pmap(ctxs, pmap)
+                else:  # split by mag
+                    for ctxs_by_mag in split_by_mag(ctxs):
+                        cm.get_pmap(list(ctxs_by_mag), pmap)
             dt = time.time() - t0
             self.source_data['src_id'].append(src.source_id)
             self.source_data['nsites'].append(nsites)
