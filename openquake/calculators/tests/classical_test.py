@@ -974,6 +974,10 @@ hazard_uhs-std.csv
         [f1] = export(('hcurves/mean', 'csv'), self.calc.datastore)
         self.assertEqualFiles('expected/hcurve-mean.csv', f1)
 
+        # collapse factor: there are 205 point sources, 1 rupture per source
+        arr = view('collapse_factor', self.calc.datastore)
+        numpy.testing.assert_equal(arr['eff_rups'], [28, 31])
+
     def test_case_70(self):
         # test bug https://github.com/gem/oq-engine/pull/7158
         self.run_calc(case_70.__file__, 'job.ini')
