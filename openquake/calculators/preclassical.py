@@ -17,17 +17,20 @@
 # along with OpenQuake. If not, see <http://www.gnu.org/licenses/>.
 
 import os
+import copy
 import logging
 import numpy
 from openquake.baselib import general, parallel, hdf5
 from openquake.baselib.python3compat import encode
 from openquake.baselib.general import (
     AccumDict, groupby, get_nbytes_msg)
+from openquake.hazardlib import valid
 from openquake.hazardlib.contexts import read_cmakers
 from openquake.hazardlib.source.point import grid_point_sources, msr_name
 from openquake.hazardlib.source.base import get_code2cls
 from openquake.hazardlib.sourceconverter import SourceGroup
-from openquake.hazardlib.calc.filters import split_source, SourceFilter
+from openquake.hazardlib.calc.filters import (
+    split_source, SourceFilter, MINMAG, MAXMAG)
 from openquake.calculators import base
 
 U16 = numpy.uint16
@@ -35,6 +38,33 @@ U32 = numpy.uint32
 F32 = numpy.float32
 F64 = numpy.float64
 TWO32 = 2 ** 32
+MAGBINS = valid.sqrscale(MINMAG, MAXMAG, 256)
+
+
+class MagBinMFD(object):
+    def __init__(self, magbin, mfd):
+        self.magbin = magbin
+        self.mfd = mfd
+
+    def get_annual_occurrence_rates(self):
+        items = self.mfd.get_annual_occurrence_rates()
+        out = [(mag, rate) for mag, rate in items
+               if numpy.searchsorted(MAGBINS, mag) == self.magbin]
+        return out
+
+
+def split_by_mag(src):
+    if hasattr(src, 'mfd') and hasattr(src.mfd, 'get_annual_occurrence_rates'):
+        pairs = src.mfd.get_annual_occurrence_rates()
+        splits = []
+        for mag, rate in pairs:
+            magbin = numpy.searchsorted(MAGBINS, mag)
+            split = copy.copy(src)
+            split.mfd = MagBinMFD(magbin, src.mfd)
+            splits.append(split)
+        return splits
+    else:
+        return [src]
 
 
 def zero_times(sources):
@@ -78,7 +108,7 @@ def preclassical(srcs, sites, cmaker, monitor):
             # NB: it is crucial to split only the close sources, for
             # performance reasons (think of Ecuador in SAM)
             splits = split_source(src) if (
-                cmaker.split_sources and src.nsites) else [src]
+                cmaker.split_sources and src.nsites) else split_by_mag(src)
             split_sources.extend(splits)
     dic = grid_point_sources(split_sources, spacing, monitor)
     # this is also prefiltering the split sources

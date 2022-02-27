@@ -179,6 +179,8 @@ class AreaSource(ParametricSeismicSource):
             new_mfd = mfd.YoungsCoppersmith1985MFD.from_characteristic_rate(
                 area_mfd.min_mag, area_mfd.b_val, area_mfd.char_mag,
                 area_mfd.char_rate / num_points, area_mfd.bin_width)
+        elif area_mfd.__class__.__name__ == 'MagBinMFD':
+            new_mfd = area_mfd
         else:
             raise TypeError('Unknown MFD: %s' % area_mfd)
 
