@@ -86,12 +86,10 @@ class Collapser(object):
         if collapse_level <= 1:
             self.dist_bins = valid.sqrscale(0, 1000, 256)
         else:  # collapse_level = 2
-            self.dist_bins = valid.sqrscale(0, 1000, 65536)
+            self.dist_bins = valid.sqrscale(0, 1000, 4096)
         self.vs30_bins = numpy.linspace(0, 32767, 65536)
         self.has_vs30 = has_vs30
         self.cfactor = numpy.zeros(2)
-        self.npartial = 0
-        self.nfull = 0
 
     def calc_mdvbin(self, ctx):
         """
@@ -120,35 +118,14 @@ class Collapser(object):
             return ctx, ctx.sids.reshape(-1, 1)
 
         # i.e. mag, rake, vs30, rjb, mdvbin, sids, occurrence_rate
-        other = set(ctx.dtype.names) - RUP_PARAMS - KNOWN_DISTANCES
-        if all(trivial(ctx, param) for param in other):
-            # collapse all
-            far = ctx
-            close = numpy.zeros(0, ctx.dtype)
-            self.nfull += 1
-        else:
-            # collapse far away ruptures
-            tocollapse = ctx['rrup'] >= ctx['mag'] * 10
-            far = ctx[tocollapse]
-            close = ctx[~tocollapse]
-            self.npartial += 1
-        C = len(close)
-        if len(far):
-            uic = numpy.unique(  # this is fast
-                far['mdvbin'], return_inverse=True, return_counts=True)
-            mean = kmean(far, 'mdvbin', uic)
-        else:
-            mean = numpy.zeros(0, ctx.dtype)
-        self.cfactor[0] += len(close) + len(mean)
+        uic = numpy.unique(  # this is fast
+            ctx.mdvbin, return_inverse=True, return_counts=True)
+        mean = kmean(ctx, 'mdvbin', uic)
+        self.cfactor[0] += len(mean)
         self.cfactor[1] += len(ctx)
-        out = numpy.zeros(len(close) + len(mean), ctx.dtype)
-        out[:C] = close
-        out[C:] = mean
-        allsids = [[sid] for sid in close['sids']]
-        if len(far):  # this is slow
-            allsids.extend(split_array(far['sids'], uic[1], uic[2]))
+        allsids = split_array(ctx.sids, uic[1], uic[2])
         # print(len(out), len(ctx))
-        return out.view(numpy.recarray), allsids
+        return mean.view(numpy.recarray), allsids
 
 
 class Timer(object):
