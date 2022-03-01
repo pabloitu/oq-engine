@@ -52,12 +52,16 @@ from openquake.hazardlib.geo.surface.multi import get_distdic, MultiSurface
 U32 = numpy.uint32
 F64 = numpy.float64
 MAXSIZE = 500_000  # used when collapsing
-TWO32 = 4_294_967_296  # 2**32
+TWO16 = 2**16
+TWO32 = 2**32
+TWO40 = 2**40
+TWO48 = 2**48
 STD_TYPES = (StdDev.TOTAL, StdDev.INTER_EVENT, StdDev.INTRA_EVENT)
 KNOWN_DISTANCES = frozenset(
     'rrup rx ry0 rjb rhypo repi rcdpp azimuth azimuth_cp rvolc closest_point'
     .split())
-RUP_PARAMS = {'mag', 'vs30', 'occurrence_rate', 'sids', 'mdvbin'}
+LESS_PARAMS = {'mag', 'dip', 'rake', 'vs30', 'occurrence_rate', 'sids',
+               'mdvbin'}
 
 
 def size(imtls):
@@ -80,29 +84,43 @@ def trivial(ctx, name):
 
 
 class Collapser(object):
-    def __init__(self, collapse_level, has_vs30=True):
+    def __init__(self, cparams, collapse_level, has_vs30=True):
+        self.dst_params = [cp for cp in sorted(cparams)
+                           if cp in KNOWN_DISTANCES]
+        self.has_vs30 = 'vs30' in cparams
+        self.has_dip = 'dip' in cparams
+        self.has_rake = 'rake' in cparams
         self.collapse_level = collapse_level
+        self.mag_bins = numpy.linspace(MINMAG, MAXMAG, 256)
+        if self.has_dip:
+            self.dip_bins = numpy.linspace(0, 90, 256)
+        if self.has_rake:
+            self.rake_bins = numpy.linspace(-180, 180, 256)
         self.mag_bins = numpy.linspace(MINMAG, MAXMAG, 256)
         if collapse_level <= 1:
             self.dist_bins = valid.sqrscale(0, 1000, 256)
         else:  # collapse_level = 2
             self.dist_bins = valid.sqrscale(0, 1000, 4096)
         self.vs30_bins = numpy.linspace(0, 32767, 65536)
-        self.has_vs30 = has_vs30
         self.cfactor = numpy.zeros(2)
+        self.oparams = set(cparams) - LESS_PARAMS - set(self.dst_params)
 
-    def calc_mdvbin(self, ctx):
+    def calc_mdvbin(self, rup):
         """
-        :param ctx: a recarray
+        :param rup: a RuptureContext
         :return: an array of integers mdvbin
         """
-        magbin = numpy.searchsorted(self.mag_bins, ctx.mag)
-        distbin = numpy.searchsorted(self.dist_bins, ctx.rrup)
+        dst = getattr(rup, self.dst_params[0])
+        magbin = numpy.searchsorted(self.mag_bins, rup.mag)
+        distbin = numpy.searchsorted(self.dist_bins, dst)
+        mdvbin = magbin * TWO48 + distbin * TWO16
+        if self.has_dip:
+            mdvbin += numpy.searchsorted(self.dip_bins, rup.dip) * TWO40
+        if self.has_rake:
+            mdvbin += numpy.searchsorted(self.rake_bins, rup.rake) * TWO32
         if self.has_vs30:
-            vs30bin = numpy.searchsorted(self.vs30_bins, ctx.rrup)
-            return magbin * TWO32 + distbin * 65536 + vs30bin
-        else:  # in test_collapse_area
-            return magbin * TWO32 + distbin * 65536
+            mdvbin += numpy.searchsorted(self.vs30_bins, rup.vs30)
+        return mdvbin
 
     def collapse(self, ctx):
         """
@@ -125,6 +143,8 @@ class Collapser(object):
         self.cfactor[1] += len(ctx)
         allsids = split_array(ctx.sids, uic[1], uic[2])
         # print(len(out), len(ctx))
+        #if self.collapse_level == 2:
+        #    import pdb; pdb.set_trace()
         return mean.view(numpy.recarray), allsids
 
 
@@ -329,7 +349,7 @@ class ContextMaker(object):
         dic['rrup'] = numpy.float64(0)
         dic['occurrence_rate'] = numpy.float64(0)
         self.ctx_builder = RecordBuilder(**dic)
-        self.collapser = Collapser(self.collapse_level, 'vs30' in dic)
+        self.collapser = Collapser(set(dic), self.collapse_level)
         self.loglevels = DictArray(self.imtls) if self.imtls else {}
         self.shift_hypo = param.get('shift_hypo')
         with warnings.catch_warnings():

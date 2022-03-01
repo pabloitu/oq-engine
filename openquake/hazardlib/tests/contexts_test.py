@@ -228,9 +228,9 @@ class CollapseTestCase(unittest.TestCase):
         cmaker.collapser.cfactor = numpy.zeros(2)
         cmaker.collapser.collapse_level = 1
         cmap = cmaker.get_pmap(ctxs)
-        self.assertLess(rms(pmap[0].array - cmap[0].array), 2E-4)
-        self.assertLess(rms(pmap[1].array - cmap[1].array), 2E-4)
-        numpy.testing.assert_equal(cmaker.collapser.cfactor, [45, 240])
+        self.assertLess(rms(pmap[0].array - cmap[0].array), 1.1E-6)
+        self.assertLess(rms(pmap[1].array - cmap[1].array), 1E-6)
+        numpy.testing.assert_equal(cmaker.collapser.cfactor, [26, 240])
 
     def test_collapse_big(self):
         smpath = os.path.join(os.path.dirname(__file__),
@@ -255,7 +255,7 @@ class CollapseTestCase(unittest.TestCase):
         cmaker.collapser.collapse_level = 1
         pcurve1 = cmaker.get_pmap(ctxs)[0]
         self.assertLess(numpy.abs(pcurve0.array - pcurve1.array).sum(), 1E-6)
-        numpy.testing.assert_equal(cmaker.collapser.cfactor, [214, 11616])
+        numpy.testing.assert_equal(cmaker.collapser.cfactor, [34, 11616])
 
     def test_collapse_azimuth(self):
         # YuEtAl2013Ms has an azimuth distance causing a lower precision
@@ -309,7 +309,7 @@ class CollapseTestCase(unittest.TestCase):
         [grp] = inp.groups
         self.assertEqual(len(grp.sources), 1)  # not splittable source
         poes = cmaker.get_poes(grp, inp.sitecol)
-        cmaker.collapser = Collapser(collapse_level=1)
+        cmaker.collapser = Collapser(cmaker.dtype.names, collapse_level=1)
         newpoes = cmaker.get_poes(inp.groups[0], inp.sitecol)
         if PLOTTING:
             import matplotlib.pyplot as plt
@@ -322,7 +322,14 @@ class CollapseTestCase(unittest.TestCase):
             plt.show()
         maxdiff = (newpoes - poes).max(axis=(1, 2))
         print('maxdiff =', maxdiff)
-        numpy.testing.assert_equal(cmaker.collapser.cfactor, [154, 228])
+        numpy.testing.assert_equal(cmaker.collapser.cfactor, [44, 228])
+
+        # collapse_level = 2
+        cmaker.collapser = Collapser(cmaker.dtype.names, collapse_level=2)
+        newpoes = cmaker.get_poes(inp.groups[0], inp.sitecol)
+        maxdiff = (newpoes - poes).max(axis=(1, 2))
+        print('maxdiff =', maxdiff)  # double precision but still not so good
+        numpy.testing.assert_equal(cmaker.collapser.cfactor, [198, 228])
 
     def test_collapse_area(self):
         # collapse an area source
@@ -398,20 +405,20 @@ class CollapseTestCase(unittest.TestCase):
         print('maxdiff =', maxdiff)
         # this is a case where the precision on site 0 is perfect, while
         # on on site 1 if far from perfect
-        self.assertLess(maxdiff[0], 1E-14)
+        self.assertLess(maxdiff[0], .004)
         self.assertLess(maxdiff[1], 2E-3)
-        numpy.testing.assert_equal(cmaker.collapser.cfactor, [125, 312])
+        numpy.testing.assert_equal(cmaker.collapser.cfactor, [48, 312])
 
         # collapse_level = 2
-        cmaker.collapser = Collapser(collapse_level=2, has_vs30=False)
+        cmaker.collapser = Collapser(cmaker.dtype.names, collapse_level=2)
         newpoes = cmaker.get_poes(inp.groups[0], inp.sitecol)
         maxdiff = (newpoes - poes).max(axis=(1, 2))
         print('maxdiff =', maxdiff)
         # this is a case where the precision on site 0 is perfect, while
         # on on site 1 if far from perfect
-        self.assertLess(maxdiff[0], 1E-14)
-        self.assertLess(maxdiff[1], 1E-14)
-        numpy.testing.assert_equal(cmaker.collapser.cfactor, [312, 312])
+        self.assertLess(maxdiff[0], .0005)
+        self.assertLess(maxdiff[1], .004)
+        numpy.testing.assert_equal(cmaker.collapser.cfactor, [273, 312])
 
 
 class GetCtxs01TestCase(unittest.TestCase):
