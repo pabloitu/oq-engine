@@ -117,11 +117,13 @@ class Collapser(object):
         :param ctx: a recarray with fields "mdvbin" and "sids"
         :returns: the collapsed array and a list of arrays with site IDs
         """
-        if npdata is not None or self.collapse_level < 0:
+        if self.collapse_level < 0:
             # no collapse
             self.cfactor[0] += len(ctx)
             self.cfactor[1] += len(ctx)
-            return ctx, ctx.sids.reshape(-1, 1)
+            pmfs = [] if npdata is None else [
+                npdata[rid]['probs_occur'] for rid in ctx.rup_id]
+            return ctx, ctx.sids.reshape(-1, 1), pmfs
 
         # names are mag, rake, vs30, rjb, mdvbin, sids, occurrence_rate, ...
         relevant = set(ctx.dtype.names) - IGNORE_PARAMS
@@ -149,10 +151,19 @@ class Collapser(object):
         out[:C] = close
         out[C:] = mean
         allsids = [[sid] for sid in close['sids']]
+        if npdata is None:
+            pmfs = []
+        else:
+            pmfs = [npdata[rid]['probs_occur'] for rid in close['rup_id']]
         if len(far):  # this is slow
             allsids.extend(split_array(far['sids'], uic[1], uic[2]))
+            if npdata is not None:  # nonparametric ruptures
+                for rids in split_array(far['rup_id'], uic[1], uic[2]):
+                    pmf = combine_pmfs([npdata[rid]['probs_occur']
+                                        for rid in rids])
+                    pmfs.append(pmf)
         # print(len(out), len(ctx))
-        return out.view(numpy.recarray), allsids
+        return out.view(numpy.recarray), allsids, pmfs
 
 
 class Timer(object):
@@ -821,7 +832,7 @@ class ContextMaker(object):
 
         # collapse if possible
         with self.col_mon:
-            ctx, allsids = self.collapser.collapse(ctx, npdata)
+            ctx, allsids, pmfs = self.collapser.collapse(ctx, npdata)
 
         # split large context arrays to avoid filling the CPU cache
         if npdata is None and ctx.nbytes > maxsize:
@@ -848,7 +859,7 @@ class ContextMaker(object):
                 if npdata is None:  # parametric
                     probs_or_tom = self.tom
                 else:  # nonparametric ruptures
-                    probs_or_tom = npdata[ctxt.rup_id]['probs_occur']
+                    probs_or_tom = pmfs[slc]
                 pnes = get_probability_no_exceedance(ctxt, poes, probs_or_tom)
             yield poes, pnes, slcsids, ctxt
 
@@ -918,6 +929,21 @@ def combine_pmf(o1, o2):
     for i in range(n1):
         for j in range(n2):
             o[i + j] += o1[i] * o2[j]
+    return o
+
+
+def combine_pmfs(pmfs):
+    """
+    Combine Probability Mass Functions.
+
+    :param pmfs: a list of PMFs of lenghts n1 ... nN
+    :returns: a PMF of length n1 + ... + nN - N + 1
+    """
+    ns = [len(pmf) for pmf in pmfs]
+    ranges = [range(n) for n in ns]
+    o = numpy.zeros(sum(ns) - len(ns) + 1)
+    for idx in itertools.product(*ranges):
+        o[sum(idx)] += numpy.prod([pmf[i] for i, pmf in zip(idx, pmfs)])
     return o
 
 
