@@ -117,7 +117,8 @@ class Collapser(object):
         :param ctx: a recarray with fields "mdvbin" and "sids"
         :returns: the collapsed array and a list of arrays with site IDs
         """
-        if self.collapse_level < 0:
+        no_weight = npdata is None or numpy.isnan(npdata['weight']).all()
+        if self.collapse_level < 0 or no_weight:
             # no collapse
             self.cfactor[0] += len(ctx)
             self.cfactor[1] += len(ctx)
@@ -722,6 +723,7 @@ class ContextMaker(object):
                             probs *= pne
                 else:  # mutex nonparametric rupture
                     # this is used in the USA model, New Madrid cluster
+                    # NB: there is no collapsing in this case
                     weights = npdata['weight'][ctx.rup_id]
                     for poe, pne, w, sids in zip(poes, pnes, weights, allsids):
                         for sid in sids:
