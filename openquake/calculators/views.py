@@ -1335,12 +1335,22 @@ def view_event_based_mfd(token, dstore):
     """
     Compare n_occ/eff_time with occurrence_rate
     """
+    if ':' in token:
+        rlz = int(token.split(':')[1])
+    else:
+        rlz = 0
     oq = dstore['oqparam']
     R = len(dstore['weights'])
     eff_time = oq.investigation_time * oq.ses_per_logic_tree_path * R
-    # print(oq.investigation_time, oq.ses_per_logic_tree_path, R, eff_time)
+    ev_df = dstore.read_df('events', 'id', sel=dict(rlz=rlz))
     rup_df = dstore.read_df('ruptures', 'id')
+    dic = dict(mag=[], freq=[], occ_rate=[])
+    for rup_id, df in ev_df.groupby('rup_id'):
+        rup = rup_df.loc[rup_id]
+        dic['mag'].append(rup.mag)
+        dic['freq'].append(len(df) / eff_time)
+        dic['occ_rate'].append(rup.occurrence_rate)
     out = []
-    for mag, df in rup_df.groupby('mag'):
-        out.append((mag, df.n_occ.sum() / eff_time, df.occurrence_rate.sum()))
+    for mag, df in pandas.DataFrame(dic).groupby('mag'):
+        out.append((mag, df.freq.sum(), df.occ_rate.sum()))
     return numpy.array(out, dt('mag frequency occur_rate'))
