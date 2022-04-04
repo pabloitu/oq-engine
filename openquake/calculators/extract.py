@@ -922,7 +922,7 @@ def extract_damages_npz(dstore, what):
     oq = dstore['oqparam']
     damage_dt = build_damage_dt(dstore)
     rlzs = dstore['full_lt'].get_realizations()
-    if oq.collect_rlzs:
+    if oq.collect_rlzs(dstore['weights'][:]):
         rlzs = [Mock(ordinal=0)]
     data = dstore['damages-rlzs']
     assets = util.get_assets(dstore)

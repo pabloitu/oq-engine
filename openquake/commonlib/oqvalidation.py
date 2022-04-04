@@ -131,12 +131,6 @@ collapse_gsim_logic_tree:
 collapse_level:
   INTERNAL
 
-collect_rlzs:
-  Collect all realizations into a single effective realization. If not given
-  it is true for sampling and false for full enumeration.
-  Example: *collect_rlzs=true*.
-  Default: None
-
 compare_with_classical:
   Used in event based calculation to perform also a classical calculation,
   so that the hazard curves can be compared.
@@ -834,7 +828,6 @@ class OqParam(valid.ParamSet):
     calculation_mode = valid.Param(valid.Choice(*ALL_CALCULATORS))
     collapse_gsim_logic_tree = valid.Param(valid.namelist, [])
     collapse_level = valid.Param(int, -1)
-    collect_rlzs = valid.Param(valid.boolean, None)
     coordinate_bin_width = valid.Param(valid.positivefloat)
     compare_with_classical = valid.Param(valid.boolean, False)
     concurrent_tasks = valid.Param(
@@ -1297,10 +1290,9 @@ class OqParam(valid.ParamSet):
         return (self.risk_investigation_time or self.investigation_time) / (
             self.investigation_time * self.ses_per_logic_tree_path)
 
-    def risk_event_rates(self, num_events, num_haz_rlzs):
+    def risk_event_rates(self, num_events):
         """
         :param num_events: the number of events per risk realization
-        :param num_haz_rlzs the number of hazard realizations
 
         If risk_investigation_time is 1, returns the annual event rates for
         each realization as a list, possibly of 1 element.
@@ -1310,10 +1302,7 @@ class OqParam(valid.ParamSet):
             return [1] * len(num_events)
         else:
             # for event based compute the time_ratio
-            time_ratio = self.time_ratio
-            if self.collect_rlzs:
-                time_ratio /= num_haz_rlzs
-            return list(time_ratio * num_events)
+            return list(self.time_ratio * num_events)
 
     @property
     def imtls(self):
@@ -1810,31 +1799,12 @@ class OqParam(valid.ParamSet):
             self.complex_fault_mesh_spacing = self.rupture_mesh_spacing
         return True
 
-    def is_valid_collect_rlzs(self):
+    def collect_rlzs(self, weights):
         """
-        sampling_method must be early_weights, only the mean is available,
-        and number_of_logic_tree_samples must be greater than 1.
+        :returns: all equal weights and not individual_rlzs
         """
-        if self.job_type == 'hazard':
-            return True
-        if self.collect_rlzs is None:
-            self.collect_rlzs = self.number_of_logic_tree_samples > 1
-        if self.calculation_mode == 'event_based_damage':
-            ini = self.inputs['job_ini']
-            if not self.investigation_time:
-                raise InvalidFile('Missing investigation_time in %s' % ini)
-            return True
-        elif self.collect_rlzs is False:
-            return True
-        elif self.hazard_calculation_id:
-            n = self._parent.number_of_logic_tree_samples
-            if n and n != self.number_of_logic_tree_samples:
-                raise ValueError('Please specify number_of_logic_tree_samples'
-                                 '=%d' % n)
-        hstats = list(self.hazard_stats())
-        nostats = not hstats or hstats == ['mean']
-        return nostats and self.number_of_logic_tree_samples > 1 and (
-            self.sampling_method == 'early_weights')
+        uniq = len(numpy.unique(weights)) == 1
+        return uniq and not self.individual_rlzs
 
     def check_uniform_hazard_spectra(self):
         ok_imts = [imt for imt in self.imtls if imt == 'PGA' or

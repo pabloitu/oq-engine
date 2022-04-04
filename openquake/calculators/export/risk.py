@@ -349,6 +349,7 @@ def modal_damage_array(data, damage_dt):
 @export.add(('damages-rlzs', 'csv'), ('damages-stats', 'csv'))
 def export_damages_csv(ekey, dstore):
     oq = dstore['oqparam']
+    ws = dstore['weights'][:]
     ebd = oq.calculation_mode == 'event_based_damage'
     dmg_dt = build_damage_dt(dstore)
     rlzs = dstore['full_lt'].get_realizations()
@@ -361,7 +362,7 @@ def export_damages_csv(ekey, dstore):
         md.update(dict(investigation_time=oq.investigation_time,
                        risk_investigation_time=rit))
     D = len(oq.limit_states) + 1
-    R = 1 if oq.collect_rlzs else len(rlzs)
+    R = 1 if oq.collect_rlzs(ws) else len(rlzs)
     if ekey[0].endswith('stats'):
         rlzs_or_stats = oq.hazard_stats()
     else:
@@ -594,7 +595,7 @@ def export_aggcurves_csv(ekey, dstore):
     cols = [col for col in dataf.columns if col not in consequences
             and col not in ('agg_id', 'rlz_id', 'loss_id')]
     edic = general.AccumDict(accum=[])
-    manyrlzs = not oq.collect_rlzs and R > 1
+    manyrlzs = oq.individual_rlzs and R > 1
     fnames = []
     pairs = [([], dataf.agg_id == K)]  # full aggregation
     for tagnames, agg_ids in zip(oq.aggregate_by, aggids):

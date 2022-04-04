@@ -117,7 +117,7 @@ def expose_outputs(dstore, owner=getpass.getuser(), status='complete'):
             dskeys.add('uhs')  # export them
         if oq.hazard_maps:
             dskeys.add('hmaps')  # export them
-    if len(rlzs) > 1 and not oq.collect_rlzs:
+    if len(rlzs) > 1 and oq.individual_rlzs:
         if 'aggrisk' in dstore:
             dskeys.add('aggrisk-stats')
         if 'aggcurves' in dstore:

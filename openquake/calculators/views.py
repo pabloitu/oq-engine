@@ -1195,11 +1195,12 @@ def view_event_rates(token, dstore):
     """
     oq = dstore['oqparam']
     R = dstore['full_lt'].get_num_rlzs()
+    ws = dstore['weights'][:]
     if oq.calculation_mode != 'event_based_damage':
         return numpy.ones(R)
     time_ratio = (oq.risk_investigation_time or oq.investigation_time) / (
         oq.ses_per_logic_tree_path * oq.investigation_time)
-    if oq.collect_rlzs:
+    if oq.collect_rlzs(ws):
         return numpy.array([len(dstore['events']) * time_ratio / R])
     else:
         rlzs = dstore['events']['rlz_id']

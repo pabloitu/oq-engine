@@ -550,12 +550,6 @@ class HazardCalculator(BaseCalculator):
         elif oq.hazard_calculation_id:
             parent = datastore.read(oq.hazard_calculation_id)
             oqparent = parent['oqparam']
-            if 'weights' in parent:
-                weights = numpy.unique(parent['weights'][:])
-                if oq.collect_rlzs and len(weights) > 1:
-                    raise ValueError(
-                        'collect_rlzs=true can be specified only if '
-                        'the realizations have identical weights')
             if oqparent.imtls:
                 check_imtls(self.oqparam.imtls, oqparent.imtls)
             self.check_precalc(oqparent.calculation_mode)

@@ -170,10 +170,6 @@ class EventBasedRiskTestCase(CalculatorTestCase):
                               delta=1E-5)
         self.assertEqual(len(self.calc.datastore['events']), 22)
 
-        losses0 = self.calc.datastore['avg_losses-stats'][:, 0, 0]  # shape ARL
-        losses1 = self.calc.datastore['avg_losses-stats'][:, 0, 0]  # shape ARL
-        avg = (losses0 + losses1).sum() / 2
-
         # agg_losses
         [fname] = export(('aggrisk', 'csv'), self.calc.datastore)
         self.assertEqualFiles('expected/%s' % strip_calc_id(fname), fname,
@@ -181,18 +177,15 @@ class EventBasedRiskTestCase(CalculatorTestCase):
 
         calc_id = str(self.calc.datastore.calc_id)
         self.run_calc(case_2.__file__, 'job_sampling.ini',
-                      collect_rlzs='true', hazard_calculation_id=calc_id)
+                      individual_rlzs='true', hazard_calculation_id=calc_id)
         [fname] = export(('aggcurves', 'csv'), self.calc.datastore)
         self.assertEqualFiles('expected/%s' % strip_calc_id(fname), fname,
                               delta=1E-5)
 
         # avg_losses
-        [fname] = export(('avg_losses-rlzs', 'csv'), self.calc.datastore)
-        self.assertEqualFiles('expected/%s' % strip_calc_id(fname), fname,
-                              delta=1E-5)
-        tot = self.calc.datastore['avg_losses-rlzs'][:, 0, 0].sum()  # A1L
-        aac(avg, tot, rtol=1E-6)
-
+        for fname in export(('avg_losses-rlzs', 'csv'), self.calc.datastore):
+            self.assertEqualFiles('expected/%s' % strip_calc_id(fname), fname,
+                                  delta=1E-5)
         # aggrisk
         [fname] = export(('aggrisk', 'csv'), self.calc.datastore)
         self.assertEqualFiles('expected/aggrisk_sampling.csv', fname,

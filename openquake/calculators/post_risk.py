@@ -93,8 +93,8 @@ def get_loss_builder(dstore, return_periods=None, loss_dt=None,
     except KeyError:
         haz_time = None
     eff_time = oq.investigation_time * oq.ses_per_logic_tree_path * (
-        len(weights) if oq.collect_rlzs else 1)
-    if oq.collect_rlzs:
+        len(weights) if oq.collect_rlzs(weights) else 1)
+    if oq.collect_rlzs(weights):
         if haz_time and haz_time != eff_time:
             raise ValueError('The effective time stored in gmf_data is %d, '
                              'which is inconsistent with %d' %
@@ -294,6 +294,7 @@ class PostRiskCalculator(base.RiskCalculator):
         Sanity checks
         """
         oq = self.oqparam
+        ws = self.datastore['weights'][:]
         # logging.info('Total portfolio loss\n' +
         #              views.view('portfolio_loss', self.datastore))
         if oq.investigation_time and 'risk' in oq.calculation_mode:
@@ -304,12 +305,13 @@ class PostRiskCalculator(base.RiskCalculator):
                         'A big variation in the %s loss curve is expected: try'
                         '\n$ oq show delta_loss:%d %d', ln, li,
                         self.datastore.calc_id)
-        logging.info('Sanity check on avg_losses and aggrisk')
-        if 'avg_losses-rlzs' in self.datastore:
+
+        if 'avg_losses-rlzs' in self.datastore and oq.collect_rlzs(ws):
+            logging.info('Sanity check on avg_losses and aggrisk')
             url = ('https://docs.openquake.org/oq-engine/advanced/'
                    'addition-is-non-associative.html')
-            num_haz_rlzs = len(self.datastore['weights'])
-            event_rates = oq.risk_event_rates(self.num_events, num_haz_rlzs)
+            ws = self.datastore['weights'][:]
+            event_rates = oq.risk_event_rates(self.num_events)
             K = len(self.datastore['agg_keys']) if oq.aggregate_by else 0
             aggrisk = self.aggrisk[self.aggrisk.agg_id == K]
             avg_losses = self.datastore['avg_losses-rlzs'][:].sum(axis=0)

@@ -111,7 +111,7 @@ def average_losses(ln, alt, rlz_id, AR, collect_rlzs):
         return sparse.coo_matrix((tot.to_numpy(), (aids, rlzs)), AR)
 
 
-def aggreg(outputs, crmodel, ARKD, aggids, rlz_id, monitor):
+def aggreg(outputs, crmodel, ARKD, aggids, rlz_id, collect_rlzs, monitor):
     """
     :returns: (avg_losses, agg_loss_table)
     """
@@ -132,7 +132,7 @@ def aggreg(outputs, crmodel, ARKD, aggids, rlz_id, monitor):
             if oq.avg_losses:
                 with mon_avg:
                     coo = average_losses(
-                        ln, alt, rlz_id, (A, R), oq.collect_rlzs)
+                        ln, alt, rlz_id, (A, R), collect_rlzs)
                     loss_by_AR[ln].append(coo)
             with mon_agg:
                 if correl:  # use sigma^2 = (sum sigma_i)^2
@@ -169,6 +169,8 @@ def event_based_risk(df, oqparam, monitor):
     """
     dstore = datastore.read(oqparam.hdf5path, parentdir=oqparam.parentdir)
     with dstore, monitor('reading data'):
+        ws = dstore['weights'][()]
+        collect_rlzs = oqparam.collect_rlzs(ws)
         if hasattr(df, 'start'):  # it is actually a slice
             df = dstore.read_df('gmf_data', slc=df)
         assetcol = dstore['assetcol']
@@ -178,7 +180,7 @@ def event_based_risk(df, oqparam, monitor):
             aggids = ()
         crmodel = monitor.read('crmodel')
         rlz_id = monitor.read('rlz_id')
-        weights = [1] if oqparam.collect_rlzs else dstore['weights'][()]
+        weights = [1] if collect_rlzs else ws
     ARKD = len(assetcol), len(weights), oqparam.K, oqparam.D
     if oqparam.ignore_master_seed or oqparam.ignore_covs:
         rng = None
@@ -197,7 +199,8 @@ def event_based_risk(df, oqparam, monitor):
                     taxo, adf, gmf_df, oqparam._sec_losses, rng)
             yield out
 
-    return aggreg(outputs(), crmodel, ARKD, aggids, rlz_id, monitor)
+    return aggreg(
+        outputs(), crmodel, ARKD, aggids, rlz_id, collect_rlzs, monitor)
 
 
 def ebrisk(proxies, full_lt, oqparam, dstore, monitor):
@@ -290,9 +293,9 @@ class EventBasedRiskCalculator(event_based.EventBasedCalculator):
 
     def create_avg_losses(self):
         oq = self.oqparam
-        ws = self.datastore['weights']
-        R = 1 if oq.collect_rlzs else len(ws)
-        if oq.collect_rlzs:
+        ws = self.datastore['weights'][:]
+        R = 1 if oq.collect_rlzs(ws) else len(ws)
+        if oq.collect_rlzs(ws):
             if oq.investigation_time:  # event_based
                 self.avg_ratio = numpy.array([oq.time_ratio / len(ws)])
             else:  # scenario
