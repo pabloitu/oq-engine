@@ -550,7 +550,7 @@ class ContextMaker(object):
             for ctx, poes in self.gen_poes(block):
                 # pnes and poes of shape (N, L, G)
                 with self.pne_mon:
-                    pnes = get_probability_no_exceedance(ctx, poes, tom)
+                    pnes = get_probability_no_exceedance(ctx, poes, ctx.temporal_occurrence_model)
                     for sid, pne in zip(ctx.sids, pnes):
                         probs = pmap.setdefault(sid, self.rup_indep).array
                         if rup_indep:
